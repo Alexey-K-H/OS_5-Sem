@@ -1,0 +1,16 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+C:/Users/Public/Documents/Clion_Progects/OS-POSIX/Lab7/main.c
+stdio.h
+-
+stdlib.h
+-
+pthread.h
+-
+
