@@ -20,14 +20,17 @@ int main() {
     pthread_t thread;
 
     if (pthread_create(&thread, NULL, childThread, NULL)) {
-        printf("Err\n");
+        printf("Error! Cannot create thread!\n");
     }
     for (int i = 0; i < 10; ++i) {
         sem_wait(&sem2);
         printf("Parent\n");
         sem_post(&sem1);
     }
-    pthread_join(thread, NULL);
+    if(pthread_join(thread, NULL)){
+        printf("Error! Cannot join thread!\n");
+    }
+
     pthread_exit((void *) 0);
 }
 
