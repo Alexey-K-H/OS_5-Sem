@@ -2,7 +2,8 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <semaphore.h>
-#include <sys/stat.h>
+#include <fcntl.h>
+
 sem_t *sem1;
 sem_t *sem2;
 
