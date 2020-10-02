@@ -35,40 +35,29 @@ void* execute_thread(void* args){
     double pi = 0.0;
     struct Param* param = (struct Param*)args;
     size_t iterations = 0;
-    size_t com_iter=0;
-    for(i = param->offset; ; i += THREADS_NUM) {
-        iterations++;
-        com_iter++;
-        pi += 1.0/(i*4.0 + 1.0);
-        pi -= 1.0/(i*4.0 + 3.0);
-        if(iterations == ITERATIONS_NUM){
-            iterations = 0;
-            if(flag == 1){
-                pthread_mutex_lock(&mutex);
-                if(max_iter!=0){
-                   if(max_iter < com_iter){
-                        max_iter = com_iter;
-                   }
-                }
-                else{
-                   max_iter = com_iter;
-                }
-
-                pthread_mutex_unlock(&mutex);
-                pthread_barrier_wait(&barrier);
-
-                for(;com_iter < max_iter;i += THREADS_NUM){
-                         pi += 1.0/(i*4.0 + 1.0);
-                         pi -= 1.0/(i*4.0 + 3.0);
-                         com_iter++;
-                }
-
-                printf("%d\n",com_iter);
-                break;
+    size_t com_iter = 0;
+    while (1){
+        for(i = ITERATIONS_NUM * iterations + param->offset; i < (iterations + 1) * ITERATIONS_NUM; i += THREADS_NUM){
+            pi += 1.0 / (i * 4.0 + 1.0);
+            pi -= 1.0 / (i * 4.0 + 3.0);
+            com_iter++;
+        }
+        pthread_barrier_wait(&barrier);
+        pthread_mutex_lock(&mutex);
+        if(flag == 1 && iterations == max_iter){
+            pthread_mutex_unlock(&mutex);
+            break;
+        }
+        else{
+            iterations++;
+            if(max_iter < iterations){
+                max_iter = iterations;
             }
         }
+        pthread_mutex_unlock(&mutex);
     }
 
+    printf("Thread-%d's iterations num:%zu\n", param->offset, com_iter);
     printf("thread-%d's partial_sum = %f\n", param->offset, pi);
     ((struct Param*)args)->partial_sum = pi;
     pthread_exit(0);

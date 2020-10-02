@@ -1,4 +1,4 @@
-# Install script for directory: /home/ninetail/Desktop/OS/Coop_labs/OS-POSIX/Lab8
+# Install script for directory: /home/ninetail/CLionProjects/OS/OS_5-Sem/Lab8
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -45,5 +45,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/ninetail/Desktop/OS/Coop_labs/OS-POSIX/Lab8/cmake-build-debug/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/home/ninetail/CLionProjects/OS/OS_5-Sem/Lab8/cmake-build-debug/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
