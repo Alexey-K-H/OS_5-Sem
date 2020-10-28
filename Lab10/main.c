@@ -11,24 +11,24 @@ void* print_message(void* str){
     int k = 1;
     if(0 == ready){
         pthread_mutex_lock(&mute[1]);
-        printf("%s:Lock mutex:%d\n", (char*)str, 1);
+        //printf("%s:Lock mutex:%d\n", (char*)str, 1);
         ready = 1;
         k = 0;
     }
     for(int i = 0; i < 10 * 3; i++){
-        printf("Iteration:%d\n", i);
+        //printf("Iteration:%d\n", i);
         if(pthread_mutex_lock(&mute[k]) != 0){
             printf("Err\n");
         }
         else{
-            printf("%s:Lock mutex:%d\n", (char*)str, k);
+            //printf("%s:Lock mutex:%d\n", (char*)str, k);
         }
         k = (k + 1) % 3;
         if(pthread_mutex_unlock(&mute[k]) != 0){
             printf("Err\n");
         }
         else{
-            printf("%s:Unlock mutex:%d\n", (char*)str, k);
+            //printf("%s:Unlock mutex:%d\n", (char*)str, k);
         }
         if(k == 2){
             printf("%s's String\n", (char*)str);
@@ -36,7 +36,7 @@ void* print_message(void* str){
         k = (k + 1) % 3;
     }
     pthread_mutex_unlock(&mute[2]);
-    printf("Unlock mutex:%d\n", k);
+    //printf("Unlock mutex:%d\n", k);
     return (void*)0;
 }
 
@@ -49,7 +49,7 @@ int main(){
         pthread_mutex_init(&mute[i], &attr);
     }
     pthread_mutex_lock(&mute[2]);
-    printf("Parent:Lock mutex:%d\n", 2);
+    //printf("Parent:Lock mutex:%d\n", 2);
     pthread_create(&pthread, NULL, print_message, (void*)"Child");
 
     //Initialization
