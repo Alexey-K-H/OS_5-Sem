@@ -1,143 +1,210 @@
-#include <pthread.h>
-#include <signal.h>
 #include <stdio.h>
-#include <unistd.h>
-#include <string.h>
+#include <pthread.h>
 #include <stdlib.h>
-#define MAX_STRING_SIZE 80
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
 
-typedef struct node {
-    char str[MAX_STRING_SIZE];
-    struct node *next;
-} node;
+#define BUF_SIZE 80
+#define EMPTY_STRING "\n"
 
-node *head;
-pthread_mutex_t listMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
-int flag = 0;
+typedef struct Node {
+    char* string;
+    struct Node* next;
+} Node;
 
-void push(node **head_ref, const char *new_data);
-void printList(node *);
-void notifySortListener(int sign);
-void bubbleStrSort(node *listStr);
-void freeList(node *listStr);
-void *sortListener(void *args);
-
-int main() {
-    pthread_t pthread;
-    head = (node *) calloc(1, sizeof(node));
-    char buffer[MAX_STRING_SIZE];
-
-    if (pthread_create(&pthread, NULL, sortListener, NULL) != 0) {
-        printf("ERROR can't create thread");
-        pthread_exit((void *) 0);
-    }
-
-    while (flag == 0) {
-        int count = read(0, buffer, MAX_STRING_SIZE - 1);
-
-        if (strcmp(buffer, "\n") == 0) {
-            pthread_mutex_lock(&listMutex);
-            printList(head);
-            pthread_mutex_unlock(&listMutex);
-            memset(buffer, 0, MAX_STRING_SIZE);
-            continue;
-        }
-        if (buffer[count - 1] == '\n') {
-            buffer[count - 1] = 0;
-        }
-
-        pthread_mutex_lock(&listMutex);
-        push(&head, buffer);
-        pthread_mutex_unlock(&listMutex);
-        memset(buffer, 0, MAX_STRING_SIZE);
-    }
-    freeList(head);
-    pthread_exit((void *) 0);
-}
-
-void printList(node *listStr) {
-    node *next, *curNode;
-    curNode = listStr;
-    int index = 0;
-    if (listStr != NULL) {
-        while (curNode != NULL) {
-            if(strcmp(curNode->str, "") != 0){
-                printf("Node[%d]:", index);
-                index++;
-                printf("%s\n", curNode->str);
-            }
-//            else{
-//                printf("Null str!\n");
-//            }
-            next = curNode->next;
-            curNode = next;
-        }
-    }
-}
-
-void push(node **head_ref, const char *new_data) {
-    node *new_node = (node *) calloc(1, sizeof(node));
-    strcpy(new_node->str, new_data);
-    new_node->next = *head_ref;
-    *head_ref = new_node;
-}
+Node* list;
+int listSize = 0;
+int finish = 0;
+pthread_mutex_t sleepMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t sleepCond = PTHREAD_COND_INITIALIZER;
 
 void notifySortListener(int sign) {
-
     if (sign == SIGALRM) {
-        pthread_cond_signal(&cond);
+        pthread_cond_signal(&sleepCond);
     }
 
     if (sign == SIGINT) {
-        flag = 1;
+        finish = 1;
         signal(sign, SIG_IGN);
     }
 }
 
-void bubbleStrSort(node *listStr) {
-    node *node, *nestedNode;
+void freeList(Node* head) {
+    if (head == NULL) {
+        return;
+    }
 
-    if (listStr != NULL) {
-        while (listStr->next != NULL) {
-            node = listStr;
-            nestedNode = node->next;
-            do {
-                if (strcmp(node->str, nestedNode->str) > 0) {
-                    char tmp[MAX_STRING_SIZE + 1] = {0};
-                    strcpy(tmp, nestedNode->str);
-                    strcpy(nestedNode->str, node->str);
-                    strcpy(node->str, tmp);
-                }
-                nestedNode = nestedNode->next;
-            } while (nestedNode != NULL);
-            listStr = listStr->next;
-        }
+    Node* tmpNode;
+    for (Node* iter = head; iter; iter = tmpNode) {
+        tmpNode = iter->next;
+        free(iter);
     }
 }
 
-void freeList(node *listStr) {
-    node *curNode;
-    node *prev;
-    curNode = listStr;
-    if (listStr != NULL) {
-        while (curNode != NULL) {
-            prev=curNode;
-            curNode = curNode->next;
-            free(prev);
-        }
+void ExitFailure(char* errorMsg){
+    perror(errorMsg);
+    freeList(list);
+    pthread_exit((void*)0);
+}
+
+void lockMutex(pthread_mutex_t* mutex){
+    if(pthread_mutex_lock(mutex)){
+        ExitFailure("Error locking mutex");
     }
 }
 
-void *sortListener(void *args) {
-    pthread_mutex_lock(&listMutex);
-    while (flag == 0) {
+void unlockMutex(pthread_mutex_t* mutex){
+    if(pthread_mutex_unlock(mutex)){
+        ExitFailure("Error unlocking mutex");
+    }
+}
+
+Node* initNode(char* str, size_t size) {
+    Node* node = malloc(sizeof(Node));
+    if (node == NULL) {
+        free(node);
+        printf("Allocation failed\n");
+        return NULL;
+    }
+
+    node->next = NULL;
+    node->string = malloc(size + 1);
+    if(strcpy(node->string, str) == NULL){
+        free(node->string);
+        free(node);
+        perror("Error creating node for input string");
+        return NULL;
+    }
+
+    return node;
+}
+
+void pushFront(Node* head, char* str) {
+    if(head == NULL){
+        return;
+    }
+
+    Node* newNode = initNode(str, strlen(str));
+
+    if (newNode == NULL) {
+        return;
+    }
+
+    newNode->next = head->next;
+    head->next = newNode;
+    listSize++;
+}
+
+void printList(Node* head){
+    if(head == NULL){
+        return;
+    }
+
+    printf("\n\n------------------LIST:\n");
+    for (Node* iter = head->next; iter; iter = iter->next) {
+        printf("%s\n", iter->string);
+    }
+    printf("----------------------:\n");
+
+}
+
+Node* initList(){
+    Node* head = malloc(sizeof(Node));
+    head->string = NULL;
+    head->next = NULL;
+    return head;
+}
+
+int isEmptyString(char* buf){
+    if(!strcmp(EMPTY_STRING, buf)){
+        printList(list);
+        return 1;
+    }
+
+    return 0;
+}
+
+void getStrings(){
+    char buf[BUF_SIZE + 1];
+    list = initList();
+
+    while (fgets(buf, BUF_SIZE + 1, stdin)){
+        if(!isEmptyString(buf)){
+            pushFront(list, buf);
+        }
+        fflush(stdout);
+    }
+}
+
+void swap(char** left, char** right){
+    char* tmp = *left;
+    *left = *right;
+    *right = tmp;
+}
+
+int compare(char* left, char* right){
+    int leftLen = strlen(left), rightLen = strlen(right);
+
+    int minLength = (leftLen > rightLen) ? rightLen : leftLen;
+    int maxLength = (leftLen < rightLen) ? rightLen : leftLen;
+
+    for(int i = 0; i < minLength; ++i){
+        if(left[i] != right[i]){
+            return 2 * (left[i] > right[i]) - 1;
+        }
+    }
+
+    if (!(maxLength - minLength)){
+        return 0;
+    }
+
+    return 2 * (maxLength == strlen(left)) - 1;
+}
+
+void* sort(void* data){
+    pthread_mutex_lock(&sleepMutex);
+    while (1){
+        if(finish){
+            pthread_mutex_unlock(&sleepMutex);
+            return data;
+        }
+
         signal(SIGALRM, notifySortListener);
         alarm(5);
-        pthread_cond_wait(&cond, &listMutex);
-        bubbleStrSort(head);
-    }
-    pthread_mutex_unlock(&listMutex);
+        pthread_cond_wait(&sleepCond, &sleepMutex);
 
-    pthread_exit((void *) 0);
+        Node *prev;
+        int i = 0, j = 0;
+        for(Node* node = list->next; node; node = node->next, ++i, j = 0){
+            prev = list;
+            for(Node* innerNode = list->next; innerNode->next; innerNode = innerNode->next, ++j){
+                if(compare(innerNode->next->string, innerNode->string) < 0){
+                    swap(&(innerNode->next->string), &(innerNode->string));
+                }
+                prev = innerNode;
+            }
+        }
+    }
+}
+
+void createThread(){
+    pthread_t threadId;
+
+    if(pthread_create(&threadId, NULL, sort, NULL)){
+        ExitFailure("Error creating thread");
+    }
+
+    getStrings();
+
+    if (pthread_join(threadId, NULL)){
+        ExitFailure("Error waiting thread");
+    }
+
+    freeList(list);
+}
+
+int main(){
+    createThread();
+    pthread_exit((void*)0);
 }

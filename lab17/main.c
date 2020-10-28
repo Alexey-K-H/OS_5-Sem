@@ -175,10 +175,10 @@ int compare(char* left, char* right){
 }
 
 void* sort(void* data){
-    pthread_mutex_lock(&sleepMutex);
+    lockMutex(&sleepMutex);
     while (1){
         if(finish){
-            pthread_mutex_unlock(&sleepMutex);
+            unlockMutex(&sleepMutex);
             return data;
         }
 
