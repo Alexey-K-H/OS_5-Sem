@@ -16,6 +16,7 @@ typedef struct Node {
 Node* list;
 int listSize = 0;
 int finish = 0;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sleepMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t sleepCond = PTHREAD_COND_INITIALIZER;
 
@@ -48,15 +49,15 @@ void ExitFailure(char* errorMsg){
     pthread_exit((void*)0);
 }
 
-void lockMutex(pthread_mutex_t* mutex){
-    if(pthread_mutex_lock(mutex)){
-        ExitFailure("Error locking mutex");
+void lockMutex(pthread_mutex_t* mutexParam){
+    if(pthread_mutex_lock(mutexParam)){
+        ExitFailure("Error locking mutexParam");
     }
 }
 
-void unlockMutex(pthread_mutex_t* mutex){
-    if(pthread_mutex_unlock(mutex)){
-        ExitFailure("Error unlocking mutex");
+void unlockMutex(pthread_mutex_t* mutexParam){
+    if(pthread_mutex_unlock(mutexParam)){
+        ExitFailure("Error unlocking mutexParam");
     }
 }
 
@@ -130,9 +131,11 @@ void getStrings(){
     list = initList();
 
     while (fgets(buf, BUF_SIZE + 1, stdin)){
+        lockMutex(&mutex);
         if(!isEmptyString(buf)){
             pushFront(list, buf);
         }
+        unlockMutex(&mutex);
         fflush(stdout);
     }
 }
@@ -174,17 +177,16 @@ void* sort(void* data){
         alarm(5);
         pthread_cond_wait(&sleepCond, &sleepMutex);
 
-        Node *prev;
+        lockMutex(&mutex);
         int i = 0, j = 0;
         for(Node* node = list->next; node; node = node->next, ++i, j = 0){
-            prev = list;
             for(Node* innerNode = list->next; innerNode->next; innerNode = innerNode->next, ++j){
                 if(compare(innerNode->next->string, innerNode->string) < 0){
                     swap(&(innerNode->next->string), &(innerNode->string));
                 }
-                prev = innerNode;
             }
         }
+        unlockMutex(&mutex);
     }
 }
 
