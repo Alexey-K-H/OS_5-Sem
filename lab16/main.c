@@ -167,7 +167,7 @@ void* sort(void* data){
     while (1){
         if(finish){
             unlockMutex(&sleepMutex);
-            return data;
+            pthread_exit((void*)0);
         }
 
         signal(SIGALRM, notifySortListener);
