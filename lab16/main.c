@@ -130,7 +130,10 @@ void getStrings(){
     char buf[BUF_SIZE + 1];
     list = initList();
 
-    while (fgets(buf, BUF_SIZE + 1, stdin)){
+    while (finish != 1){
+        if(fgets(buf, BUF_SIZE + 1, stdin)==NULL){
+            continue;
+        }
         lockMutex(&mutex);
         if(!isEmptyString(buf)){
             pushFront(list, buf);
