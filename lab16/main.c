@@ -17,14 +17,8 @@ Node* list;
 int listSize = 0;
 int finish = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t sleepMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t sleepCond = PTHREAD_COND_INITIALIZER;
 
 void notifySortListener(int sign) {
-    if (sign == SIGALRM) {
-        pthread_cond_signal(&sleepCond);
-    }
-
     if (sign == SIGINT) {
         finish = 1;
         signal(sign, SIG_IGN);
@@ -169,17 +163,12 @@ int compare(char* left, char* right){
 }
 
 void* sort(void* data){
-    lockMutex(&sleepMutex);
     while (1){
         if(finish){
-            unlockMutex(&sleepMutex);
             pthread_exit((void*)0);
         }
 
-        signal(SIGALRM, notifySortListener);
-        alarm(5);
-        pthread_cond_wait(&sleepCond, &sleepMutex);
-
+        sleep(5);
         lockMutex(&mutex);
         int i = 0, j = 0;
         for(Node* node = list->next; node; node = node->next, ++i, j = 0){
@@ -210,6 +199,7 @@ void createThread(){
 }
 
 int main(){
+    signal(SIGINT, notifySortListener);
     createThread();
     pthread_exit((void*)0);
 }

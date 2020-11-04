@@ -17,14 +17,8 @@ typedef struct Node {
 Node* list;
 int listSize = 0;
 int finish = 0;
-pthread_mutex_t sleepMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t sleepCond = PTHREAD_COND_INITIALIZER;
 
 void notifySortListener(int sign) {
-    if (sign == SIGALRM) {
-        pthread_cond_signal(&sleepCond);
-    }
-
     if (sign == SIGINT) {
         finish = 1;
         signal(sign, SIG_IGN);
@@ -178,16 +172,12 @@ int compare(char* left, char* right){
 }
 
 void* sort(void* data){
-    lockMutex(&sleepMutex);
     while (1){
         if(finish){
-            unlockMutex(&sleepMutex);
             pthread_exit((void*)0);
         }
 
-        signal(SIGALRM, notifySortListener);
-        alarm(5);
-        pthread_cond_wait(&sleepCond, &sleepMutex);
+        sleep(5);
 
         Node *prev;
         int i = 0, j = 0;
@@ -199,9 +189,7 @@ void* sort(void* data){
                 lockMutex(&(innerNode->next->mutex));
                 if(compare(innerNode->next->string, innerNode->string) < 0){
                     swap(&(innerNode->next->string), &(innerNode->string));
-                    signal(SIGALRM, notifySortListener);
-                    alarm(1);
-                    pthread_cond_wait(&sleepCond, &sleepMutex);
+                    sleep(1);
                 }
                 unlockMutex(&(prev->mutex));
                 prev = innerNode;
@@ -212,26 +200,47 @@ void* sort(void* data){
     }
 }
 
-void createThread(){
-    pthread_t threadId, threadId2;
-
-    if(pthread_create(&threadId, NULL, sort, NULL)){
-        ExitFailure("Error creating thread");
+void createThreads(int count){
+//    pthread_t threadId, threadId2;
+//
+//    if(pthread_create(&threadId, NULL, sort, NULL)){
+//        ExitFailure("Error creating thread");
+//    }
+//    /*if(pthread_create(&threadId2, NULL, sort, NULL)){
+//	ExitFailure("Error creating second thread");
+//    }*/
+//
+//    getStrings();
+//
+//    if (pthread_join(threadId, NULL)){
+//        ExitFailure("Error waiting thread");
+//    }
+    pthread_t* threads;
+    threads = (pthread_t*)malloc(sizeof(pthread_t)*count);
+    for(int i = 0; i < count; i++) {
+        if(pthread_create(&threads[i], NULL, sort, NULL)){
+            ExitFailure("Error creating thread");
+        }
     }
-    /*if(pthread_create(&threadId2, NULL, sort, NULL)){
-	ExitFailure("Error creating second thread");
-    }*/
 
     getStrings();
 
-    if (pthread_join(threadId, NULL)){
-        ExitFailure("Error waiting thread");
+    for(int i =0; i < count; i++){
+        if (pthread_join(threads[i], NULL)){
+            ExitFailure("Error waiting thread");
+        }
     }
 
     freeList(list);
 }
 
-int main(){
-    createThread();
+int main(int argc, char** argv){
+    if(argc < 2){
+        pthread_exit((void*)0);
+    }
+
+    int count = atoi(argv[1]);
+    signal(SIGINT, notifySortListener);
+    createThreads(count);
     pthread_exit((void*)0);
 }
