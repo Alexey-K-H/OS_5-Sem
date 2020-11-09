@@ -203,7 +203,6 @@ void* sort(void* data){
                 unlockMutex(&(prev->mutex));
 
                 if(finish){
-                    pthread_cond_destroy(&cond);
                     pthread_mutex_unlock(&waitMutex);
                     pthread_mutex_destroy(&waitMutex);
                     pthread_exit(data);
