@@ -2,11 +2,12 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <signal.h>
+#include <errno.h>
+#include <time.h>
 
 #define BUF_SIZE 80
 #define EMPTY_STRING "\n"
+#define EXIT_STRING "exit\n"
 
 typedef struct Node {
     char* string;
@@ -17,13 +18,6 @@ typedef struct Node {
 Node* list;
 int listSize = 0;
 int finish = 0;
-
-void notifySortListener(int sign) {
-    if (sign == SIGINT) {
-        finish = 1;
-        signal(sign, SIG_IGN);
-    }
-}
 
 void freeList(Node* head) {
     if (head == NULL) {
@@ -38,21 +32,15 @@ void freeList(Node* head) {
     }
 }
 
-void ExitFailure(char* errorMsg){
-    perror(errorMsg);
-    freeList(list);
-    pthread_exit((void*)0);
-}
-
 void lockMutex(pthread_mutex_t* mutex){
     if(pthread_mutex_lock(mutex)){
-        ExitFailure("Error locking mutex");
+        printf("Error locking mutex\n");
     }
 }
 
 void unlockMutex(pthread_mutex_t* mutex){
     if(pthread_mutex_unlock(mutex)){
-        ExitFailure("Error unlocking mutex");
+        printf("Error unlocking mutex\n");
     }
 }
 
@@ -100,18 +88,14 @@ void printList(Node* head){
     if(head == NULL){
         return;
     }
-    lockMutex(&(head->mutex));
-    Node *prev = head;
+
     printf("\n\n------------------LIST:\n");
     for (Node* iter = head->next; iter; iter = iter->next) {
         lockMutex(&(iter->mutex));
-        unlockMutex(&(prev->mutex));
         printf("%s\n", iter->string);
-        prev = iter;
+        unlockMutex(&(iter->mutex));
     }
-    unlockMutex(&(prev->mutex));
     printf("----------------------:\n");
-
 }
 
 Node* initList(){
@@ -131,6 +115,14 @@ int isEmptyString(char* buf){
     return 0;
 }
 
+int isExitString(char *buf){
+    if(!strcmp(EXIT_STRING, buf)){
+        return 1;
+    }
+
+    return 0;
+}
+
 void getStrings(){
     char buf[BUF_SIZE + 1];
     list = initList();
@@ -139,10 +131,20 @@ void getStrings(){
         if(fgets(buf, BUF_SIZE + 1, stdin)==NULL){
             continue;
         }
-        if(!isEmptyString(buf)){
-            pushFront(list, buf);
+        if(isExitString(buf)){
+            finish = 1;
+            fflush(stdout);
+            break;
         }
-        fflush(stdout);
+        else{
+            if(!isEmptyString(buf)){
+                pushFront(list, buf);
+            }
+            else{
+                printList(list);
+            }
+            fflush(stdout);
+        }
     }
 }
 
@@ -153,10 +155,10 @@ void swap(char** left, char** right){
 }
 
 int compare(char* left, char* right){
-    int leftLen = strlen(left), rightLen = strlen(right);
+    unsigned int leftLen = strlen(left), rightLen = strlen(right);
 
-    int minLength = (leftLen > rightLen) ? rightLen : leftLen;
-    int maxLength = (leftLen < rightLen) ? rightLen : leftLen;
+    unsigned int minLength = (leftLen > rightLen) ? rightLen : leftLen;
+    unsigned int maxLength = (leftLen < rightLen) ? rightLen : leftLen;
 
     for(int i = 0; i < minLength; ++i){
         if(left[i] != right[i]){
@@ -172,65 +174,81 @@ int compare(char* left, char* right){
 }
 
 void* sort(void* data){
+    pthread_mutex_t waitMutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&waitMutex);
     while (1){
-        if(finish){
-            pthread_exit((void*)0);
-        }
+        pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+        struct timespec delay;
+        clock_gettime(CLOCK_REALTIME, &delay);
+        delay.tv_sec += 5;
+        while(pthread_cond_timedwait(&cond, &waitMutex, &delay) != ETIMEDOUT);
+        pthread_cond_destroy(&cond);
 
-        sleep(5);
-
-        Node *prev;
-        int i = 0, j = 0;
-        for(Node* node = list->next; node; node = node->next, ++i, j = 0){
+        Node* prev;
+        Node* curr;
+        for(Node* currNode = list->next; currNode->next; currNode = currNode->next){
             prev = list;
-            lockMutex(&(list->mutex));
-            lockMutex(&(list->next->mutex));
-            for(Node* innerNode = list->next; innerNode->next; innerNode = innerNode->next, ++j){
-                lockMutex(&(innerNode->next->mutex));
-                if(compare(innerNode->next->string, innerNode->string) < 0){
-                    swap(&(innerNode->next->string), &(innerNode->string));
-                    sleep(1);
+            curr = currNode;
+            for(Node* nextNode = currNode->next; nextNode; nextNode = nextNode->next){
+                lockMutex(&(prev->mutex));
+                lockMutex(&(curr->mutex));
+                lockMutex(&(nextNode->mutex));
+
+                if(compare(nextNode->string, currNode->string) < 0){
+                    swap(&(nextNode->string), &(currNode->string));
+
+                    unlockMutex(&(nextNode->mutex));
+                    unlockMutex(&(curr->mutex));
+                    unlockMutex(&(prev->mutex));
+
+                    pthread_cond_t innerCond = PTHREAD_COND_INITIALIZER;
+                    struct timespec innerDelay;
+                    clock_gettime(CLOCK_REALTIME, &innerDelay);
+                    innerDelay.tv_sec += 1;
+                    while(pthread_cond_timedwait(&innerCond, &waitMutex, &innerDelay) != ETIMEDOUT);
+                    pthread_cond_destroy(&innerCond);
+
+                    lockMutex(&(prev->mutex));
+                    lockMutex(&(curr->mutex));
+                    lockMutex(&(nextNode->mutex));
                 }
+
+                unlockMutex(&(nextNode->mutex));
+                unlockMutex(&(curr->mutex));
                 unlockMutex(&(prev->mutex));
-                prev = innerNode;
+
+                if(finish){
+                    pthread_mutex_unlock(&waitMutex);
+                    pthread_mutex_destroy(&waitMutex);
+                    pthread_exit(data);
+                }
+
+                curr = curr->next;
+                prev = prev->next;
             }
-            unlockMutex(&(prev->mutex));
-            unlockMutex(&(prev->next->mutex));
         }
     }
 }
 
 void createThreads(int count){
-//    pthread_t threadId, threadId2;
-//
-//    if(pthread_create(&threadId, NULL, sort, NULL)){
-//        ExitFailure("Error creating thread");
-//    }
-//    /*if(pthread_create(&threadId2, NULL, sort, NULL)){
-//	ExitFailure("Error creating second thread");
-//    }*/
-//
-//    getStrings();
-//
-//    if (pthread_join(threadId, NULL)){
-//        ExitFailure("Error waiting thread");
-//    }
     pthread_t* threads;
     threads = (pthread_t*)malloc(sizeof(pthread_t)*count);
     for(int i = 0; i < count; i++) {
         if(pthread_create(&threads[i], NULL, sort, NULL)){
-            ExitFailure("Error creating thread");
+            printf("Error creating thread\n");
         }
     }
 
     getStrings();
 
+    printf("Waiting for sorting threads...\n");
     for(int i =0; i < count; i++){
         if (pthread_join(threads[i], NULL)){
-            ExitFailure("Error waiting thread");
+            printf("Error waiting thread\n");
         }
     }
 
+    printf("Free list...\n");
     freeList(list);
 }
 
@@ -240,7 +258,6 @@ int main(int argc, char** argv){
     }
 
     int count = atoi(argv[1]);
-    signal(SIGINT, notifySortListener);
     createThreads(count);
     pthread_exit((void*)0);
 }
