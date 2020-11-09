@@ -103,7 +103,6 @@ Node* initList(){
 
 int isEmptyString(char* buf){
     if(!strcmp(EMPTY_STRING, buf)){
-        printList(list);
         return 1;
     }
 
@@ -135,6 +134,9 @@ void getStrings(){
             lockMutex(&mutex);
             if(!isEmptyString(buf)){
                 pushFront(list, buf);
+            }
+            else{
+                printList(list);
             }
             unlockMutex(&mutex);
             fflush(stdout);
