@@ -233,5 +233,8 @@ int main(int argc, char* argv[]) {
     mymsgdestroy(&q);
     printf("All threads quit and queue destroyed\n");
 
+    free(producers);
+    free(consumers);
+
     return 0;
 }
