@@ -236,5 +236,5 @@ int main(int argc, char* argv[]) {
     free(producers);
     free(consumers);
 
-    return 0;
+    pthread_exit((void *)0);
 }
