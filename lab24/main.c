@@ -1,15 +1,13 @@
 #include <pthread.h>
 #include <stdio.h>
-#include <semaphore.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #include <alloca.h>
 #include <unistd.h>
 
-sem_t isEmpty;
-sem_t isFull;
-sem_t global;
+pthread_mutex_t mutex;
+pthread_cond_t cond;
 
 struct Message {
     char message[81];
@@ -21,54 +19,49 @@ struct Queue {
     struct Message* head;
     struct Message* tail;
     int isDroped;
+    int mesCount;
 };
 
 void mymsginit(struct Queue* queue) {
-    sem_init(&isEmpty, 0, 10);
-    sem_init(&isFull, 0, 0);
-    sem_init(&global, 0, 1);
-
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&cond, NULL);
     queue->head = NULL;
     queue->tail = NULL;
     queue->isDroped = 0;
+    queue->mesCount = 0;
 }
 
 void mymsqdrop(struct Queue* queue) {
-	sem_wait(&global);
     queue->isDroped = 1;
-    sem_post(&isEmpty);
-    sem_post(&isFull);
-	sem_post(&global);
+    pthread_cond_broadcast(&cond);
 }
 
 void mymsgdestroy(struct Queue* queue) {
-    sem_wait(&global);
     struct Message* tmp = queue->head;
-
+    pthread_mutex_lock(&mutex);
     struct Message* del_tmp;
     while(tmp) {
         del_tmp  = tmp;
         tmp = tmp->next;
         free(del_tmp);
     }
-
-    sem_post(&global);
-
-    sem_destroy(&global);
-    sem_destroy(&isEmpty);
-    sem_destroy(&isFull);
+    pthread_mutex_unlock(&mutex);
+    pthread_cond_destroy(&cond);
+    pthread_mutex_destroy(&mutex);
 }
 
 int mymsgget(struct Queue* queue, char* buf, size_t bufSize) {
     if(queue == NULL)
         return 0;
-
-    sem_wait(&isFull);
-    sem_wait(&global);
+    pthread_mutex_lock(&mutex);
+    if(queue->isDroped == 1) {
+        return 0;
+    }
+    while(queue->mesCount == 0 && queue->isDroped != 1)
+        pthread_cond_wait(&cond, &mutex);
 
     if(queue->isDroped == 1) {
-        sem_post(&global);
-        sem_post(&isFull);
+        pthread_mutex_unlock(&mutex);
         return 0;
     }
     struct Message* res = queue->tail;
@@ -82,8 +75,10 @@ int mymsgget(struct Queue* queue, char* buf, size_t bufSize) {
     }
     strncpy(buf, res->message, bufSize);
 
-    sem_post(&global);
-    sem_post(&isEmpty);
+    if(queue->mesCount == 10)
+        pthread_cond_signal(&cond);
+    (queue->mesCount)--;
+    pthread_mutex_unlock(&mutex);
     return 1;
 }
 
@@ -91,12 +86,17 @@ int mymsgput(struct Queue* queue, char* msg) {
     if(queue == NULL)
         return 0;
 
-    sem_wait(&isEmpty);
-    sem_wait(&global);
+
+    pthread_mutex_lock(&mutex);
+    if(queue->isDroped == 1) {
+        return 0;
+    }
+
+    while(queue->mesCount >= 10 && queue->isDroped != 1)
+        pthread_cond_wait(&cond, &mutex);
 
     if(queue->isDroped == 1) {
-        sem_post(&global);
-        sem_post(&isEmpty);
+        pthread_mutex_unlock(&mutex);
         return 0;
     }
 
@@ -106,6 +106,7 @@ int mymsgput(struct Queue* queue, char* msg) {
     new_mes->next = NULL;
 
     struct Message* tmp;
+
     sprintf(new_mes->message, "%s", "");
     strncat(new_mes->message, msg, 80);
 
@@ -120,8 +121,10 @@ int mymsgput(struct Queue* queue, char* msg) {
         queue->tail = new_mes;
     }
 
-    sem_post(&global);
-    sem_post(&isFull);
+    if(queue->mesCount == 0)
+        pthread_cond_signal(&cond);
+    (queue->mesCount)++;
+    pthread_mutex_unlock(&mutex);
     return 1;
 }
 
@@ -131,31 +134,31 @@ void *producer(void *pq) {
     struct Queue *q=(struct Queue*)pq;
     int i;
 
-    for(i = 0; i < 1000; i++) {
+    for(i=0; i<1000; i++) {
         char buf[40];
         sprintf(buf, "Message %d from thread %lu", i, pthread_self());
-        if (mymsgput(q, buf) == 0)
+        if (mymsgput(q, buf) == 0) {
             pthread_exit((void*)0);
+        }
     }
 
     pthread_exit((void*)0);
 }
 
 void *consumer(void *pq) {
-    struct Queue *q = (struct Queue*)pq;
+    struct Queue *q=( struct Queue*)pq;
     int i;
 
     do {
         char buf[41];
-        i = mymsgget(q, buf, sizeof(buf));
-        if (i==0){
+        i=mymsgget(q, buf, sizeof(buf));
+        if (i==0) {
             break;
         }
         else {
             printf("Received by thread %lu: %s\n", pthread_self(), buf);
         }
     } while(1);
-
     pthread_exit((void*)0);
 }
 
@@ -166,6 +169,7 @@ void sigintHandler(int sig) {
     signal(sig, sigintHandler);
 }
 
+
 int main(int argc, char* argv[]) {
     struct Queue q;
     int nProducers, nConsumers;
@@ -173,13 +177,11 @@ int main(int argc, char* argv[]) {
     int i;
 
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <nProducers> <nConsumers>\n", argv[0]);
+        fprintf(stderr, "Usage: %s nProducers nConsumers\n", argv[0]);
         pthread_exit((void *)0);
     }
-
     nProducers = atoi(argv[1]);
     nConsumers = atoi(argv[2]);
-
     if (nProducers == 0 || nConsumers == 0) {
         fprintf(stderr, "Usage: %s nProducers nConsumers\n", argv[0]);
         pthread_exit((void *)0);
@@ -199,8 +201,8 @@ int main(int argc, char* argv[]) {
     }
 
     signal(SIGINT, sigintHandler);
-
     mymsginit(&q);
+
     for(i=0; i < nProducers || i < nConsumers; i++) {
         if (i < nProducers) {
             if(pthread_create(&producers[i], NULL, producer, &q)){
@@ -214,27 +216,22 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    while (!pleaseQuit) pause();//pause() is THREAD-SAFE!!!
+    while (!pleaseQuit) pause();
 
     mymsqdrop(&q);
     for(i=0; i < nProducers || i < nConsumers; i++) {
         if(i < nProducers) {
-            if(pthread_join(producers[i], NULL)){
-                printf("Error to join producer thread[%d]\n", i);
-            }
+            pthread_join(producers[i], NULL);
         }
         if (i < nConsumers) {
-            if(pthread_join(consumers[i], NULL)){
-                printf("Error to join consumer thread[%d]\n", i);
-            }
+            pthread_join(consumers[i], NULL);
         }
     }
-
     mymsgdestroy(&q);
     printf("All threads quit and queue destroyed\n");
 
     free(producers);
     free(consumers);
 
-    return 0;
+    pthread_exit((void *)0);
 }
