@@ -5,10 +5,23 @@
 #include <signal.h>
 #include <alloca.h>
 #include <unistd.h>
+#include <time.h>
 
 pthread_mutex_t mutex;
+pthread_mutex_t doubleMutex;
 pthread_cond_t cond;
 
+void logger(const char* tag, const char* message) {
+    time_t now;
+    time(&now);
+    if(strcmp(tag,"mymsgput")==0){
+        printf("\033[0;32m %s [%s] [thread:%d]: %s\n\033[0m", ctime(&now), tag, pthread_self(), message);
+    }
+    else{
+        printf("\033[0;34m %s [%s] [thread:%d]: %s\n\033[0m", ctime(&now), tag, pthread_self(), message);
+    }
+
+}
 struct Message {
     char message[81];
     struct Message* next;
@@ -24,6 +37,7 @@ struct Queue {
 
 void mymsginit(struct Queue* queue) {
     pthread_mutex_init(&mutex, NULL);
+    pthread_mutex_init(&doubleMutex, NULL);
     pthread_cond_init(&cond, NULL);
     queue->head = NULL;
     queue->tail = NULL;
@@ -32,8 +46,10 @@ void mymsginit(struct Queue* queue) {
 }
 
 void mymsqdrop(struct Queue* queue) {
+    pthread_mutex_lock(&mutex);
     queue->isDroped = 1;
     pthread_cond_broadcast(&cond);
+    pthread_mutex_unlock(&mutex);
 }
 
 void mymsgdestroy(struct Queue* queue) {
@@ -48,19 +64,28 @@ void mymsgdestroy(struct Queue* queue) {
     pthread_mutex_unlock(&mutex);
     pthread_cond_destroy(&cond);
     pthread_mutex_destroy(&mutex);
+    pthread_mutex_destroy(&doubleMutex);
 }
 
 int mymsgget(struct Queue* queue, char* buf, size_t bufSize) {
-    if(queue == NULL)
-        return 0;
-    pthread_mutex_lock(&mutex);
-    if(queue->isDroped == 1) {
+    if(queue == NULL){
         return 0;
     }
-    while(queue->mesCount == 0 && queue->isDroped != 1)
+
+    pthread_mutex_lock(&mutex);
+    logger("mymsget", "block mutex");
+    while(queue->mesCount == 0 && queue->isDroped != 1){
+        pthread_mutex_lock(&doubleMutex);
+        logger("mymsget", "wait and unlock mutex");
+        pthread_mutex_unlock(&doubleMutex);
         pthread_cond_wait(&cond, &mutex);
+        logger("mymsget", "lock mutex after wait");
+
+    }
+
 
     if(queue->isDroped == 1) {
+        logger("mymsget", "unlock mutex");
         pthread_mutex_unlock(&mutex);
         return 0;
     }
@@ -74,28 +99,34 @@ int mymsgget(struct Queue* queue, char* buf, size_t bufSize) {
         queue->tail->next = NULL;
     }
     strncpy(buf, res->message, bufSize);
+    printf("curMesCount=%d\n",queue->mesCount);
+    if(queue->mesCount == 10){
+        pthread_cond_broadcast(&cond);
+        logger("mymsget", "broadcast signal that mesCount<10");
+    }
 
-    if(queue->mesCount == 10)
-        pthread_cond_signal(&cond);
     (queue->mesCount)--;
     pthread_mutex_unlock(&mutex);
     return 1;
 }
 
 int mymsgput(struct Queue* queue, char* msg) {
-    if(queue == NULL)
-        return 0;
-
-
-    pthread_mutex_lock(&mutex);
-    if(queue->isDroped == 1) {
+    if(queue == NULL){
         return 0;
     }
 
-    while(queue->mesCount >= 10 && queue->isDroped != 1)
+    pthread_mutex_lock(&mutex);
+    logger("mymsgput", "block mutex");
+
+    while(queue->mesCount >= 10 && queue->isDroped != 1){
+        logger("mymsgput", "wait and unlock mutex");
         pthread_cond_wait(&cond, &mutex);
+        logger("mymsgput", "lock mutex after wait");
+    }
+
 
     if(queue->isDroped == 1) {
+        logger("mymsgput", "its dropped and unlock mutex");
         pthread_mutex_unlock(&mutex);
         return 0;
     }
@@ -104,7 +135,7 @@ int mymsgput(struct Queue* queue, char* msg) {
     new_mes = (struct Message*)malloc(sizeof(struct Message));
     new_mes->prev = NULL;
     new_mes->next = NULL;
-
+    printf("curMesCount=%d\n",queue->mesCount);
     struct Message* tmp;
 
     sprintf(new_mes->message, "%s", "");
@@ -121,8 +152,11 @@ int mymsgput(struct Queue* queue, char* msg) {
         queue->tail = new_mes;
     }
 
-    if(queue->mesCount == 0)
-        pthread_cond_signal(&cond);
+    if(queue->mesCount == 0){
+        logger("mymsgput", "broadcast signal that mesCount>0");
+        pthread_cond_broadcast(&cond);
+    }
+
     (queue->mesCount)++;
     pthread_mutex_unlock(&mutex);
     return 1;
