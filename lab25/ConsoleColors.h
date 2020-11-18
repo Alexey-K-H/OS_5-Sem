@@ -1,0 +1,20 @@
+#ifndef LAB23_24_CONSOLECOLORS_H
+#define LAB23_24_CONSOLECOLORS_H
+
+char* CHILD_COLOR;
+char* PARENT_COLOR;
+char* ERROR_COLOR;
+char* DEFAULT_COLOR;
+
+char* BLACK_COLOR;
+char* RED_COLOR;
+char* GREEN_COLOR;
+char* YELLOW_COLOR;
+char* BLUE_COLOR;
+char* MAGENTA_COLOR;
+char* CYAN_COLOR;
+char* WHITE_COLOR;
+
+void throwAndExit(char* msg);
+
+#endif //LAB23_24_CONSOLECOLORS_H
