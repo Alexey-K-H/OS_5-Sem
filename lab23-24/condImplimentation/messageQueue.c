@@ -39,7 +39,7 @@ size_t mymsgput(MessageQueue *queue, char *text){
     }
 
     if(!queue->msgCount){
-        condTrySignal(&queue->condAccess);
+        condTryBroadcast(&queue->condAccess);
     }
     queue->msgCount++;
     mutexTryUnlock(&queue->mutexAccess);
@@ -66,7 +66,7 @@ size_t mymsgget(MessageQueue *queue, char *buffer, size_t bufferSize){
     }
 
     if(queue->msgCount == queue->msgLimit){
-        condTrySignal(&queue->condAccess);
+        condTryBroadcast(&queue->condAccess);
     }
     queue->msgCount--;
     mutexTryUnlock(&queue->mutexAccess);

@@ -30,7 +30,6 @@ void *producer(){
 
     while (1){
         sprintf(messageText, "Hello from PRODUCER#%d [%d]", id, messageNumber++);
-        sleep(2);
         if(!mymsgput(&queue, messageText)){
             pthread_exit((void *)0);
         }
@@ -43,7 +42,6 @@ void *consumer(){
     char messageText[STRING_LENGTH_LIMIT + 1];
 
     while (1){
-        sleep(4);
         if(!mymsgget(&queue, messageText, STRING_LENGTH_LIMIT + 1)){
             pthread_exit((void *)0);
         }
