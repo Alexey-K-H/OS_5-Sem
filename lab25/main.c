@@ -63,7 +63,7 @@ void atExit(){
 
 int main(int argc, char** argv) {
     if(argc != 4){
-        fprintf(stderr, "Usage: %s [frontendPort] [backendUrl] [backendPort]\n", argv[0]);
+        fprintf(stderr, "%sUsage: %s [frontendPort] [backendUrl] [backendPort]\n", RED_COLOR, argv[0]);
         exit(EXIT_FAILURE);
     }
 
