@@ -70,15 +70,18 @@ void mymsgqdrop(MessageQueue *queue){
     semTryPost(&queue->semPut);
     semTryPost(&queue->semGet);
 
+    mutexTryLock(&queue->mutexAccess);
     Message *message = queue->in;
     while (message){
         Message *buf = message->next;
         free(message);
         message = buf;
     }
+    mutexTryUnlock(&queue->mutexAccess);
 }
 void mymsgdestroy(MessageQueue *queue){
     semTryDestroy(&queue->semPut);
     semTryDestroy(&queue->semGet);
+    mutexTryDestroy(&queue->mutexAccess);
 }
 

@@ -58,6 +58,14 @@ void sigintHandler(int sig) {
     signal(sig, sigintHandler);
 }
 
+void atExit(){
+    if(queue.isDestroyed){
+        return;
+    }
+    mymsgqdrop(&queue);
+    mymsgdestroy(&queue);
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         fprintf(stderr, "%s\nUsage: %s nProducers nConsumers\n", ERROR_COLOR, argv[0]);
@@ -68,6 +76,7 @@ int main(int argc, char** argv) {
 
     threads = (pthread_t*)malloc(sizeof(pthread_t)*(nConsumers + nProducers));
 
+    atexit(atExit);
     signal(SIGINT, sigintHandler);
 
     mymsginit(&queue, MESSAGES_LIMIT);
