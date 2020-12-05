@@ -75,32 +75,39 @@ void receiving_routine(int socket_fd){
     }
 
     while (!is_socket_eof){
-        int pos;
-        for(pos = 0; pos < buffer_bytes_count; pos++){
-            if(buffer[pos] == '\n'){
-                lines_left--;
-                if(!lines_left){
-                    pos++;
-                    break;
+        mutex_try_lock(&mutex);
+        while (!buffer_bytes_count && !is_socket_eof){
+            cond_try_wait(&cond, &mutex);
+        }
+
+        while (buffer_bytes_count){
+            int pos;
+            for(pos = 0; pos < buffer_bytes_count; pos++){
+                if(buffer[pos] == '\n'){
+                    lines_left--;
+                    if(!lines_left){
+                        pos++;
+                        break;
+                    }
                 }
             }
-        }
 
-        if(write(STDOUT_FILENO, buffer, pos) < pos){
-            throw_and_exit("write");
-        }
-        else{
-            buffer_bytes_count -= pos;
-        }
+            if(write(STDOUT_FILENO, buffer, pos) < pos){
+                throw_and_exit("write");
+            }
+            else{
+                buffer_bytes_count -= pos;
+            }
 
-        if(buffer_bytes_count){
-            memmove(buffer, buffer + pos, buffer_bytes_count);
-        }
+            if(buffer_bytes_count){
+                memmove(buffer, buffer + pos, buffer_bytes_count);
+            }
 
-        if(!lines_left){
-            printf("%sPress enter to scroll down.%s\n", YELLOW_COLOR, WHITE_COLOR);
-            while (getchar() != '\n');
-            lines_left = PAGE_SIZE;
+            if(!lines_left){
+                printf("%sPress enter to scroll down.%s\n", YELLOW_COLOR, WHITE_COLOR);
+                while (getchar() != '\n');
+                lines_left = PAGE_SIZE;
+            }
         }
 
         cond_try_signal(&cond);
