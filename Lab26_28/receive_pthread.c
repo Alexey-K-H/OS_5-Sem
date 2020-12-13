@@ -5,13 +5,15 @@
 #include "service/cond.h"
 #include "service/console_colors.h"
 #include "service/mutex.h"
+#include "service/semaphoreService.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <semaphore.h>
 
-#define BUFSIZE 8192
+#define BUFSIZE 192
 #define PAGE_SIZE 25
 
 typedef struct {
@@ -19,18 +21,23 @@ typedef struct {
     char *buffer;
     int *buffer_bytes_count;
     int *is_socket_eof;
-    pthread_mutex_t *mutex;
-    pthread_cond_t *cond;
+//    pthread_mutex_t *mutex;
+//    pthread_cond_t *cond;
+
+    sem_t *full;
+    sem_t *empty;
 }Socket_Routine_Args;
 
 void *socket_routine(void *args_raw){
     Socket_Routine_Args *args = (Socket_Routine_Args*)args_raw;
 
     while (!*args->is_socket_eof){
-        mutex_try_lock(args->mutex);
-        while (*args->buffer_bytes_count){
-            cond_try_wait(args->cond, args->mutex);
-        }
+//        mutex_try_lock(args->mutex);
+//        while (*args->buffer_bytes_count){
+//            cond_try_wait(args->cond, args->mutex);
+//        }
+
+        semTryWait(args->empty);
 
         int bytes_read = read(args->socket_fd, args->buffer, BUFSIZE);
         if(-1 == bytes_read){
@@ -43,18 +50,25 @@ void *socket_routine(void *args_raw){
             *args->buffer_bytes_count = bytes_read;
         }
 
-        cond_try_signal(args->cond);
-        mutex_try_unlock(args->mutex);
+//        cond_try_signal(args->cond);
+//        mutex_try_unlock(args->mutex);
+        semTryPost(args->full);
     }
 
     pthread_exit((void*)0);
 }
 
 void receiving_routine(int socket_fd){
-    pthread_mutex_t mutex;
-    mutex_try_init(&mutex);
-    pthread_cond_t cond;
-    cond_try_init(&cond);
+//    pthread_mutex_t mutex;
+//    mutex_try_init(&mutex);
+//    pthread_cond_t cond;
+//    cond_try_init(&cond);
+
+    sem_t buffer_full;
+    sem_t buffer_empty;
+
+    semTryInit(&buffer_full, 0, 0);
+    semTryInit(&buffer_empty, 0, 2);
 
     char buffer[BUFSIZE];
     int buffer_bytes_count = 0;
@@ -66,8 +80,10 @@ void receiving_routine(int socket_fd){
     args.buffer = buffer;
     args.buffer_bytes_count = &buffer_bytes_count;
     args.is_socket_eof = &is_socket_eof;
-    args.mutex = &mutex;
-    args.cond = &cond;
+//    args.mutex = &mutex;
+//    args.cond = &cond;
+    args.empty = &buffer_empty;
+    args.full = &buffer_full;
 
     pthread_t socket_thread;
     if(pthread_create(&socket_thread, NULL, socket_routine, &args)){
@@ -75,10 +91,11 @@ void receiving_routine(int socket_fd){
     }
 
     while (!is_socket_eof){
-        mutex_try_lock(&mutex);
-        while (!buffer_bytes_count && !is_socket_eof){
-            cond_try_wait(&cond, &mutex);
-        }
+//        mutex_try_lock(&mutex);
+//        while (!buffer_bytes_count && !is_socket_eof){
+//            cond_try_wait(&cond, &mutex);
+//        }
+        semTryWait(&buffer_full);
 
         while (buffer_bytes_count){
             int pos;
@@ -110,11 +127,15 @@ void receiving_routine(int socket_fd){
             }
         }
 
-        cond_try_signal(&cond);
-        mutex_try_unlock(&mutex);
+//        cond_try_signal(&cond);
+//        mutex_try_unlock(&mutex);
+        semTryPost(&buffer_empty);
     }
 
     if(pthread_join(socket_thread, NULL)){
         throw_and_exit("pthread_join");
     }
+
+    semTryDestroy(&buffer_empty);
+    semTryDestroy(&buffer_full);
 }
