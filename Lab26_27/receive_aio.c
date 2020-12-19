@@ -9,7 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define BUFSIZE 8192
+#define BUF_SIZE 8192
 #define PAGE_SIZE 25
 
 struct aiocb create_aiorq(int fildes, char* buf, int nbytes){
@@ -24,7 +24,7 @@ struct aiocb create_aiorq(int fildes, char* buf, int nbytes){
 
 void receiving_routine(int socket_fd){
     unsigned lines_left = PAGE_SIZE;
-    char buffer[BUFSIZE];
+    char buffer[BUF_SIZE];
     int buffer_bytes_count = 0;
     int bytes_to_write = 0;
     char is_socketfd_eof = 0;
@@ -51,7 +51,7 @@ void receiving_routine(int socket_fd){
         }
 
         if(!is_socketfd_eof && !buffer_bytes_count){
-            receive_request = create_aiorq(socket_fd, buffer, BUFSIZE);
+            receive_request = create_aiorq(socket_fd, buffer, BUF_SIZE);
             requests[0] = &receive_request;
             aio_read(&receive_request);
         }

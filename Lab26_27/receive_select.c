@@ -8,12 +8,12 @@
 #include <sys/select.h>
 #include <unistd.h>
 
-#define BUFSIZE 8192
+#define BUF_SIZE 8192
 #define PAGE_SIZE 25
 
 void receiving_routine(int socket_fd){
     unsigned lines_left = PAGE_SIZE;
-    char buffer[BUFSIZE];
+    char buffer[BUF_SIZE];
     int buffer_bytes_count = 0;
     char is_socketfd_eof = 0;
 
