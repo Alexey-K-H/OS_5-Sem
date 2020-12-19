@@ -12,7 +12,6 @@
 
 #define DEFAULT_PORT 80
 #define BUFFER_SIZE 128
-#define DNS_TIMEOUT 10
 
 int finished = 0;
 
@@ -66,7 +65,6 @@ void * writeThread(void * p)
             else
             {
                 localStart += written;
-
                 if (localStart == lineEnd && NULL != enter)
                 {
                     linesWritten++;
@@ -76,23 +74,18 @@ void * writeThread(void * p)
             if (linesWritten == 25)
             {
                 char temp;
-
                 printf("Press enter to scroll down\n");
                 do {
                     if (-1 == read(STDIN_FILENO, &temp, 1)) {
                         perror("Cannot read from terminal");
                     }
                 } while (temp != '\n');
-
                 linesWritten = 0;
             }
         }
-
         memset(buffer, 0, localEnd);
         parameter->ends[id] = 0;
-
         id = (id + 1) % 10;
-
         sem_post(&(parameter->empty));
     }
 
@@ -143,16 +136,8 @@ void * readThread(void * p)
     return NULL;
 }
 
-void sigHandler(int signum) {
-    fprintf(stderr, "Dns request timed out\n");
-    exit(EXIT_FAILURE);
-}
-
 int makeConnection(const char *hostName) {
-    signal(SIGALRM, sigHandler);
-    alarm(DNS_TIMEOUT);
     struct hostent *hostInfo = gethostbyname(hostName);
-    alarm(0);
 
     if (NULL == hostInfo) {
         fprintf(stderr, "Cannot get host by name\n");
@@ -164,9 +149,7 @@ int makeConnection(const char *hostName) {
     destinationAddress.sin_family = AF_INET;
     destinationAddress.sin_port = htons(DEFAULT_PORT);
     memcpy(&destinationAddress.sin_addr, hostInfo->h_addr, hostInfo->h_length);
-
     int httpSocket = socket(AF_INET, SOCK_STREAM, 0);
-
 
     if (-1 == httpSocket) {
         perror("Cannot create socket");
@@ -277,12 +260,9 @@ int main(int argc, char *argv[]) {
 
     initSemaphore(&parameter.empty, 10);
     initSemaphore(&parameter.full, 0);
-
     parameter.socket = httpSocket;
-
     pthread_t thread;
     createThread(&thread, writeThread, &parameter);
-
     readThread(&parameter);
     pthread_join(thread, NULL);
 
